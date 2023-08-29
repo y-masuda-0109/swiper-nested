@@ -160,16 +160,51 @@
         },
       })
 
-      // メインのページネーションの bullet に追加でクリックイベントを設定
-      parent.pagination.bullets.filter((_, index) => {
-        // 子Swiperがあるスライドと同じ index の bullet のみに限定
-        return parent.slides[index].querySelector('.swiper.child')
-      }).forEach((bullet, index) => {
-        bullet.addEventListener('click', () => {
-          // 子Swiperを先頭へもどす
-          children[index].slideTo(0)
-        })
-      })
+      let childIndexTo = null
+      // 親スライドのDOM要素と子Swiperのマップを作成
+      const slideChildMap = parent.slides.filter((el, index) => {
+        // 子Swiper要素を持っているか、でフィルターする
+        const childEl = el.querySelector('.swiper.child')
+        if (childEl) {
+          // フィルターついでに、bullet のクリックイベントを登録
+          parent.pagination.bullets[index].addEventListener('click', () => {
+            // 子Swiperを先頭へもどす
+            if (parent.activeIndex === index) {
+              // すでにそのスライドがアクティブな場合は、トランジション効果ありで先頭へもどす
+              childEl.swiper.slideTo(0)
+            } else {
+              // そうでない場合は、スライド変更イベントで先頭へもどす
+              childIndexTo = 0
+            }
+          })
+        }
+        return childEl
+      }).reduce((map, slide, index) => {
+        return map.set(slide, children[index])
+      }, new Map())
+
+      // 親スライドのスライド変更イベント用関数
+      const resetChild = ({ activeIndex, previousIndex, slides }) => {
+        // 子Swiperを先頭か、末尾へもどす
+        const slide = slides[activeIndex]
+        // 親スライドにマップされた子Swiperがあるか
+        if (slideChildMap.has(slide)) {
+          const child = slideChildMap.get(slide)
+          // chidIndexTo が設定されている = 親スライドの bullet がクリックされた
+          if (childIndexTo !== null) {
+            child.slideTo(childIndexTo, 0, false)
+            childIndexTo = null
+            return
+          }
+          child.slideTo(
+            // 進行方向によって先頭か末尾をきめる
+            activeIndex - previousIndex > 0 ? 0 : child.slides.length - 1,
+            0,
+            false
+          )
+        }
+      }
+      parent.on('slideChange', resetChild)
 
       // 全Swiper再起動メソッド
       // 公式の方法がなくて…完全かどうか不明
@@ -185,6 +220,7 @@
           swiper.mousewheel.enable()
           swiper.pagination.update()
         })
+        parent.on('slideChange', resetChild)
       }
 
       // 全Swiper破棄メソッド
